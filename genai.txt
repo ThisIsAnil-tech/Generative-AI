@@ -1,0 +1,458 @@
+<BatBin/>
+
+SourceNew
+Exp6 
+!pip install -q transformers peft accelerate datasets
+from datasets import load_dataset
+from transformers import (
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
+    TrainingArguments,
+    Trainer
+)
+from peft import get_peft_model, TaskType, LoraConfig
+data = load_dataset("fancyzhx/ag_news")
+train_data = data['train'].select(range(1000))
+test_data = data['test'].select(range(100))
+tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+model = AutoModelForSequenceClassification.from_pretrained('distilbert-base-uncased',num_labels=4)
+config = LoraConfig(
+    r=4,
+    lora_alpha=8,
+    lora_dropout=0.1,
+    target_modules=['q_lin','v_lin'],
+    task_type=TaskType.SEQ_CLS
+)
+model = get_peft_model(model, config)
+model.print_trainable_parameters()
+def tokenizer_func(example):
+  return tokenizer(
+      example['text'],
+      padding='max_length',
+      max_length=64,
+      truncation=True
+  )
+train_data = train_data.map(tokenizer_func, batched=True)
+test_data = test_data.map(tokenizer_func, batched=True)
+args = TrainingArguments(
+    output_dir="result",
+    num_train_epochs=3,
+    per_device_train_batch_size=16,
+    learning_rate=2e-4,
+    save_strategy="no",
+    report_to="none"
+)
+trainer = Trainer(
+    model=model,
+    args=args,
+    train_dataset=train_data,
+    processing_class=tokenizer
+)
+trainer.train()
+result = trainer.predict(test_data)
+pred = result.predictions.argmax(axis=1)
+classes = {
+    0:'world',
+    1:'sports',
+    2:'business',
+    3:'technology',
+}
+for i in range(10):
+  print(test_data[i]['text'])
+  print(classes[test_data[i]['label']])
+  print(classes[int(pred[i])])
+  print()
+Exp 5
+!pip install -q crewai
+import os
+from getpass import getpass
+from crewai import Agent, Task, Crew, LLM, Process
+os.environ["GEMINI_API_KEY"] = getpass("Enter Gemini API Key: ")
+llm = LLM(
+    model="gemini/gemini-3.6-flash",
+    api_key=os.environ["GEMINI_API_KEY"]
+)
+source = input("Starting city: ")
+destination = input("Destination: ")
+days = int(input("Number of days: "))
+people = int(input("Number of travelers: "))
+budget = float(input("Budget (₹): "))
+interest = input("Interests: ")
+info = f"""
+From: {source}
+To: {destination}
+Days: {days}
+Travelers: {people}
+Budget: ₹{budget}
+Interests: {interest}
+"""
+transport = Agent(
+    role="Transport Expert",
+    goal="Suggest affordable transportation",
+    backstory="You are a travel transport expert.",
+    llm=llm
+)
+hotel = Agent(
+    role="Hotel Expert",
+    goal="Suggest affordable accommodation",
+    backstory="You are a hotel expert.",
+    llm=llm
+)
+activities = Agent(
+    role="Activity Expert",
+    goal="Suggest suitable activities",
+    backstory="You are a local travel guide.",
+    llm=llm
+)
+planner = Agent(
+    role="Travel Planner",
+    goal="Create a complete budget-friendly itinerary",
+    backstory="You are an experienced travel planner.",
+    llm=llm
+)
+t1 = Task(
+    description=f"""
+    Suggest affordable transportation for:
+    {info}
+    Consider the route, number of travelers,
+    trip duration, and estimated total cost.
+    """,
+    agent=transport,
+    expected_output="Transport options and estimated costs."
+)
+t2 = Task(
+    description=f"""
+    Suggest affordable accommodation for:
+    {info}
+    Consider the number of travelers, required rooms,
+    duration, and estimated accommodation cost.
+    """,
+    agent=hotel,
+    expected_output="Hotel options and estimated costs."
+)
+t3 = Task(
+    description=f"""
+    Suggest realistic activities for:
+    {info}
+    Activities must match the destination and interests.
+    Include estimated costs and avoid unrealistic schedules.
+    """,
+    agent=activities,
+    expected_output="Activities and their estimated costs."
+)
+t4 = Task(
+    description=f"""
+    Create a day-wise travel itinerary using the results
+    of the transport, hotel, and activity tasks.
+    Travel requirements:
+    {info}
+    Requirements:
+    1. Keep the estimated total cost within the budget.
+    2. Match activities to the destination and interests.
+    3. Fit the schedule within the given number of days.
+    4. Use suitable transportation for the route.
+    5. Avoid duplicate activities.
+    6. Include estimated costs and a total budget breakdown.
+    7. Clearly identify uncertain prices and information.
+    Use the previous task outputs to prepare the itinerary.
+    """,
+    agent=planner,
+    context=[t1, t2, t3],
+    expected_output="Complete day-wise itinerary with cost breakdown."
+)
+crew = Crew(
+    agents=[transport, hotel, activities, planner],
+    tasks=[t1, t2, t3, t4],
+    process=Process.sequential,
+    verbose=True
+)
+result = crew.kickoff()
+print("\n===== FINAL TRAVEL ITINERARY =====")
+print(result)
+print("\nMulti-Agent Travel Planner Completed")
+Exp 4
+!pip install -q faiss-cpu sentence-transformers transformers sentencepiece
+import faiss
+import numpy as np
+import torch
+from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+encoder = SentenceTransformer("all-MiniLM-L6-v2")
+name = "google/flan-t5-small"
+tokenizer = AutoTokenizer.from_pretrained(name)
+generator = AutoModelForSeq2SeqLM.from_pretrained(name)
+docs = [
+    "Case 1: A contract dispute arose between two parties. "
+    "The court held that the agreement was valid because both parties "
+    "had clearly accepted its terms.",
+    "Case 2: A person was accused of negligence after causing an accident. "
+    "The court explained that negligence requires a duty of care, "
+    "a breach of that duty, and resulting harm.",
+    "Case 3: A tenant challenged an eviction notice. "
+    "The court held that the landlord must follow the applicable "
+    "legal procedure before evicting the tenant.",
+    "Case 4: A company used another company's trademark without permission. "
+    "The court held that unauthorized use of a protected trademark "
+    "could amount to infringement."
+]
+embeddings = encoder.encode(docs).astype("float32")
+index = faiss.IndexFlatL2(embeddings.shape[1])
+index.add(embeddings)
+print("Legal document index created successfully.")
+def retrieve(question, k=2):
+    embedding = encoder.encode(
+        [question]
+    ).astype("float32")
+    distances, indices = index.search(embedding, k)
+    return [docs[i] for i in indices[0] if i < len(docs)]
+def answer(question, documents, level):
+    context = "\n".join(documents)
+    if level == "1":
+        instruction = "Answer in 1 or 2 sentences."
+    elif level == "2":
+        instruction = (
+            "Give a short paragraph explaining the main facts and decision."
+        )
+    else:
+        instruction = (
+            "Give a detailed explanation of the facts, "
+            "legal issue, and court decision."
+        )
+    prompt = f"""
+You are a legal document analysis assistant.
+Use only the retrieved legal content.
+Retrieved Legal Content:
+{context}
+Question:
+{question}
+Instructions:
+{instruction}
+Do not invent facts.
+If the information is insufficient, say so.
+"""
+    inputs = tokenizer(
+        prompt,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512
+    )
+    with torch.no_grad():
+        output = generator.generate(
+            **inputs,
+            max_new_tokens=150,
+            do_sample=False
+        )
+    return tokenizer.decode(
+        output[0],
+        skip_special_tokens=True
+    )
+question = input("Enter your legal question: ")
+documents = retrieve(question)
+print("\nRetrieved Legal Content:")
+print("\n".join(documents))
+print("\nChoose summary level:")
+print("1. Brief")
+print("2. Moderate")
+print("3. Detailed")
+level = input("Enter choice: ")
+if level not in ["1", "2", "3"]:
+    print("Invalid choice. Using Detailed summary.")
+    level = "3"
+print("\nFinal Answer:")
+print(answer(question, documents, level))
+print("\nLegal QA Experiment Completed.")
+Exp 3
+!pip install -q biopython scikit-learn transformers sentencepiece sentence-transformers
+import torch
+from Bio import Entrez
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+Entrez.email = "your_email@example.com"
+encoder = SentenceTransformer("all-MiniLM-L6-v2")
+name = "google/flan-t5-small"
+tokenizer = AutoTokenizer.from_pretrained(name)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    name,
+    tie_word_embeddings=False
+)
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
+model.to(device)
+def fetch(query, number=5):
+    search = Entrez.esearch(
+        db="pubmed",
+        term=query,
+        retmax=number
+    )
+    ids = Entrez.read(search)["IdList"]
+    search.close()
+    if not ids:
+        return []
+    result = Entrez.efetch(
+        db="pubmed",
+        id=ids,
+        rettype="abstract",
+        retmode="text"
+    )
+    text = result.read()
+    result.close()
+    documents = [
+        x.strip()
+        for x in text.split("\n\n")
+        if len(x.strip()) > 100
+    ]
+    return documents[:number]
+def retrieve(question, documents, top_k=3):
+    document_vectors = encoder.encode(documents)
+    question_vector = encoder.encode([question])
+    similarity = cosine_similarity(
+        question_vector,
+        document_vectors
+    )[0]
+    indices = similarity.argsort()[-top_k:][::-1]
+    return [documents[i] for i in indices]
+def generate(question, documents):
+    context = "\n\n".join(documents)
+    prompt = f"""
+    Use the following PubMed information to answer
+    the biomedical question.
+    PubMed information:
+    {context}
+    Question:
+    {question}
+    Give a short and accurate answer based only
+    on the provided information.
+    If the information is insufficient, say so.
+    """
+    inputs = tokenizer(
+        prompt,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512
+    )
+    inputs = {
+        k: v.to(device)
+        for k, v in inputs.items()
+    }
+    with torch.no_grad():
+        output = model.generate(
+            **inputs,
+            max_new_tokens=100
+        )
+    return tokenizer.decode(
+        output[0],
+        skip_special_tokens=True
+    )
+question = input("Enter your biomedical question: ")
+documents = fetch(question)
+print("\nNumber of PubMed documents retrieved:", len(documents))
+if not documents:
+    print("No PubMed documents found.")
+else:
+    relevant = retrieve(question, documents)
+    print("\nRelevant PubMed information:")
+    for i, doc in enumerate(relevant, 1):
+        print(f"\nDocument {i}:")
+        print(doc[:800])
+    print("\nFINAL BIOMEDICAL ANSWER")
+    print(generate(question, relevant))
+print("\nBiomedical RAG Experiment Completed.")
+Exp 2
+!pip install -q transformers pandas
+import pandas as pd
+from transformers import pipeline
+path = "/content/IMDB-Dataset.csv"
+df = pd.read_csv(
+    path,
+    engine="python",
+    on_bad_lines="skip"
+)
+print("Dataset loaded successfully!")
+print("Number of reviews:", len(df))
+model = pipeline(
+    "sentiment-analysis",
+    model="distilbert-base-uncased-finetuned-sst-2-english"
+)
+n = 5
+for i in range(min(n, len(df))):
+    review = str(df.iloc[i]["review"])
+    actual = str(df.iloc[i]["sentiment"]).upper()
+    prediction = model(
+        review,
+        truncation=True,
+        max_length=512
+    )[0]
+    print(f"\nReview {i + 1}")
+    print("Actual:", actual)
+    print("Predicted:", prediction["label"])
+    print("Confidence:", round(prediction["score"], 4))
+    print("Review:", review[:200], "...")
+print("\nSentiment Analysis Experiment Completed.")
+Exp 1
+!pip install -q transformers datasets rouge-score sentencepiece
+import torch
+import pandas as pd
+from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from rouge_score import rouge_scorer
+dataset = load_dataset("S3IC/cnn_dailymail", split="train")
+name = "facebook/bart-large-cnn"
+tokenizer = AutoTokenizer.from_pretrained(name)
+model = AutoModelForSeq2SeqLM.from_pretrained(name)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+model.eval()
+scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True )
+def summarize(article):
+    inputs = tokenizer(
+        article,
+        max_length=512,
+        truncation=True,
+        return_tensors="pt"
+    )
+    inputs = {
+        k: v.to(device)
+        for k, v in inputs.items()
+    }
+    with torch.no_grad():
+        output = model.generate(
+            **inputs,
+            max_length=100,
+            min_length=20,
+            num_beams=4,
+            no_repeat_ngram_size=3,
+            early_stopping=True
+        )
+    return tokenizer.decode(
+        output[0],
+        skip_special_tokens=True
+    )
+results = []
+n = min(5, len(dataset))
+for i in range(n):
+    article = dataset[i]["article"]
+    reference = dataset[i]["highlights"]
+    summary = summarize(article)
+    scores = scorer.score(reference, summary)
+    row = {
+        "Article_Number": i + 1,
+        "Generated_Summary": summary,
+        "Reference_Summary": reference,
+        "ROUGE-1": scores["rouge1"].fmeasure,
+        "ROUGE-2": scores["rouge2"].fmeasure,
+        "ROUGE-L": scores["rougeL"].fmeasure
+    }
+    results.append(row)
+    print(f"\nARTICLE {i + 1}")
+    print("SUMMARY:", summary)
+    print("ROUGE-1:", round(row["ROUGE-1"], 4))
+    print("ROUGE-2:", round(row["ROUGE-2"], 4))
+    print("ROUGE-L:", round(row["ROUGE-L"], 4))
+df = pd.DataFrame(results)
+print("\nAVERAGE ROUGE")
+print(df[["ROUGE-1", "ROUGE-2", "ROUGE-L"]].mean())
+df.to_csv("summarization_results.csv", index=False)
+print("\nSummarization Experiment Completed.")
+print("Results saved to summarization_results.csv")
