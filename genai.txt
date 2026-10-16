@@ -1,7 +1,6 @@
-<BatBin/>
-
-SourceNew
 Exp6 
+
+
 !pip install -q transformers peft accelerate datasets
 from datasets import load_dataset
 from transformers import (
@@ -62,7 +61,11 @@ for i in range(10):
   print(classes[test_data[i]['label']])
   print(classes[int(pred[i])])
   print()
+
+
 Exp 5
+
+
 !pip install -q crewai
 import os
 from getpass import getpass
@@ -170,7 +173,11 @@ result = crew.kickoff()
 print("\n===== FINAL TRAVEL ITINERARY =====")
 print(result)
 print("\nMulti-Agent Travel Planner Completed")
+
+
 Exp 4
+
+
 !pip install -q faiss-cpu sentence-transformers transformers sentencepiece
 import faiss
 import numpy as np
@@ -261,7 +268,11 @@ if level not in ["1", "2", "3"]:
 print("\nFinal Answer:")
 print(answer(question, documents, level))
 print("\nLegal QA Experiment Completed.")
+
+
 Exp 3
+
+
 !pip install -q biopython scikit-learn transformers sentencepiece sentence-transformers
 import torch
 from Bio import Entrez
@@ -359,7 +370,11 @@ else:
     print("\nFINAL BIOMEDICAL ANSWER")
     print(generate(question, relevant))
 print("\nBiomedical RAG Experiment Completed.")
+
+
 Exp 2
+
+
 !pip install -q transformers pandas
 import pandas as pd
 from transformers import pipeline
@@ -390,7 +405,11 @@ for i in range(min(n, len(df))):
     print("Confidence:", round(prediction["score"], 4))
     print("Review:", review[:200], "...")
 print("\nSentiment Analysis Experiment Completed.")
+
+
 Exp 1
+
+
 !pip install -q transformers datasets rouge-score sentencepiece
 import torch
 import pandas as pd
