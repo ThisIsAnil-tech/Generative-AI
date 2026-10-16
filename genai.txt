@@ -1,7 +1,7 @@
 Exp6 
 
 
-!pip install -q transformers peft accelerate datasets
+!pip install -q transformers==4.49.0 peft==0.14.0 datasets==3.2.0 accelerate==1.2.1 "torchao>=0.16.0"
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer,
@@ -13,8 +13,9 @@ from peft import get_peft_model, TaskType, LoraConfig
 data = load_dataset("fancyzhx/ag_news")
 train_data = data['train'].select(range(1000))
 test_data = data['test'].select(range(100))
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-model = AutoModelForSequenceClassification.from_pretrained('distilbert-base-uncased',num_labels=4)
+tok_name = "distilbert-base-uncased"
+tokenizer = AutoTokenizer.from_pretrained(tok_name)
+model = AutoModelForSequenceClassification.from_pretrained(tok_name, num_labels=4)
 config = LoraConfig(
     r=4,
     lora_alpha=8,
